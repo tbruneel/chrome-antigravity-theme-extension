@@ -3,9 +3,9 @@
 
   const MODE_KEY = 'frameMode';
   const COLOR_KEY = 'frameColor';
-  const LOCAL_CACHE_KEY = '__ag_pwa_frame_color_v4__';
+  const LOCAL_CACHE_KEY = '__ag_pwa_frame_color_v5__';
 
-  // Antigravity's 4 theme/contrast shell colors:
+  // Exact Antigravity top header ("Antigravity" title bar) colors for all 4 combinations:
   const LIGHT_DEFAULT_COLOR = '#fafafa'; // rgb(250, 250, 250)
   const LIGHT_STRONG_COLOR  = '#f3f3f3'; // rgb(243, 243, 243)
   const DARK_DEFAULT_COLOR  = '#111114'; // rgb(17, 17, 20)
@@ -30,48 +30,49 @@
     };
   }
 
-  function getStoredContrast() {
+  function isStrongContrastFromStorage() {
     try {
       for (let i = 0; i < window.localStorage.length; i++) {
         const k = window.localStorage.key(i);
         if (k && k.endsWith('.jetski.contrast')) {
-          return window.localStorage.getItem(k);
+          return window.localStorage.getItem(k) === '2';
         }
       }
     } catch (_) {}
-    return '1';
+    return false;
+  }
+
+  function mapThemeAndContrastToColor(isDark, isStrong) {
+    if (isDark) {
+      return isStrong ? DARK_STRONG_COLOR : DARK_DEFAULT_COLOR;
+    }
+    return isStrong ? LIGHT_STRONG_COLOR : LIGHT_DEFAULT_COLOR;
   }
 
   function detectThemeColorFromStorage() {
+    const isStrong = isStrongContrastFromStorage();
     try {
       const cached = window.localStorage.getItem(LOCAL_CACHE_KEY);
-      const contrast = getStoredContrast();
-      const isStrong = contrast === '2';
-
       if (cached && /^#[0-9a-fA-F]{6}$/.test(cached)) {
         const lower = cached.toLowerCase();
-        // If the contrast setting in localStorage changed, adjust standard palette colors immediately
-        if (lower === LIGHT_DEFAULT_COLOR && isStrong) return LIGHT_STRONG_COLOR;
-        if (lower === LIGHT_STRONG_COLOR && !isStrong) return LIGHT_DEFAULT_COLOR;
-        if (lower === DARK_DEFAULT_COLOR && isStrong) return DARK_STRONG_COLOR;
-        if (lower === DARK_STRONG_COLOR && !isStrong) return DARK_DEFAULT_COLOR;
-        return lower;
+        const isCachedDark = (lower === DARK_DEFAULT_COLOR || lower === DARK_STRONG_COLOR);
+        return mapThemeAndContrastToColor(isCachedDark, isStrong);
       }
 
       const bcsp = window.localStorage.getItem('bcsp');
-      if (bcsp === 'dark') return isStrong ? DARK_STRONG_COLOR : DARK_DEFAULT_COLOR;
-      if (bcsp === 'light') return isStrong ? LIGHT_STRONG_COLOR : LIGHT_DEFAULT_COLOR;
+      if (bcsp === 'dark') return mapThemeAndContrastToColor(true, isStrong);
+      if (bcsp === 'light') return mapThemeAndContrastToColor(false, isStrong);
 
       for (let i = 0; i < window.localStorage.length; i++) {
         const k = window.localStorage.key(i);
         if (k && /theme|color.?scheme|appearance/i.test(k) && k !== LOCAL_CACHE_KEY) {
           const v = String(window.localStorage.getItem(k) || '').toLowerCase();
-          if (v.includes('dark')) return isStrong ? DARK_STRONG_COLOR : DARK_DEFAULT_COLOR;
-          if (v.includes('light')) return isStrong ? LIGHT_STRONG_COLOR : LIGHT_DEFAULT_COLOR;
+          if (v.includes('dark')) return mapThemeAndContrastToColor(true, isStrong);
+          if (v.includes('light')) return mapThemeAndContrastToColor(false, isStrong);
         }
       }
     } catch (_) {}
-    return LIGHT_DEFAULT_COLOR;
+    return mapThemeAndContrastToColor(false, isStrong);
   }
 
   function sampleColorAtPoint(x, y) {
@@ -80,7 +81,7 @@
       while (el && el !== document.documentElement) {
         const parsed = rgbToHex(window.getComputedStyle(el).backgroundColor);
         if (parsed) {
-          return parsed.hex;
+          return parsed;
         }
         el = el.parentElement;
       }
@@ -91,38 +92,55 @@
   function detectThemeColorFromDom() {
     if (!document.body) return null;
 
-    // 1. Sample the actual rendered outer shell/top-bar background right below the window title bar
-    const samplePoints = [
-      [16, 12],
-      [200, 12],
-      [16, 24]
-    ];
-    for (const [x, y] of samplePoints) {
-      const sampled = sampleColorAtPoint(x, y);
-      if (sampled && sampled !== '#ffffff' && sampled !== '#050507' && sampled !== '#070708') {
-        return sampled;
+    const isStrong = isStrongContrastFromStorage();
+
+    // 1. Sample the top "Antigravity" header bar directly (x=200, y=12)
+    // If it matches one of the 4 exact header colors, return it immediately.
+    const topSample = sampleColorAtPoint(200, 12) || sampleColorAtPoint(16, 12);
+    if (topSample) {
+      if (
+        topSample.hex === LIGHT_DEFAULT_COLOR ||
+        topSample.hex === LIGHT_STRONG_COLOR ||
+        topSample.hex === DARK_DEFAULT_COLOR ||
+        topSample.hex === DARK_STRONG_COLOR
+      ) {
+        return topSample.hex;
       }
     }
 
-    // 2. Fallback: inspect body / documentElement computed background color directly
+    // 2. Determine whether the active theme is Dark or Light, and combine with contrast (Default vs Strong)
+    // to always produce the exact top-header color (#fafafa, #f3f3f3, #111114, or #121216),
+    // never body's --mat-sys-surface (#131314 / #ffffff).
+    if (
+      document.body.classList.contains('dark-theme') ||
+      document.body.classList.contains('dark') ||
+      document.documentElement.classList.contains('dark-theme') ||
+      document.documentElement.classList.contains('dark') ||
+      document.documentElement.getAttribute('data-theme') === 'dark' ||
+      document.body.getAttribute('data-theme') === 'dark'
+    ) {
+      return mapThemeAndContrastToColor(true, isStrong);
+    }
+
+    if (
+      document.body.classList.contains('light-theme') ||
+      document.body.classList.contains('light') ||
+      document.documentElement.classList.contains('light-theme') ||
+      document.documentElement.classList.contains('light') ||
+      document.documentElement.getAttribute('data-theme') === 'light' ||
+      document.body.getAttribute('data-theme') === 'light'
+    ) {
+      return mapThemeAndContrastToColor(false, isStrong);
+    }
+
+    if (topSample) {
+      return mapThemeAndContrastToColor(topSample.isDark, isStrong);
+    }
+
     try {
-      const candidates = [
-        document.body,
-        document.documentElement
-      ];
-      for (const el of candidates) {
-        if (!el) continue;
-        const parsed = rgbToHex(window.getComputedStyle(el).backgroundColor);
-        if (parsed) {
-          // If the page hasn't finished applying its exact shell styles, map using stored contrast
-          if (parsed.hex === '#ffffff' || parsed.hex === '#000000') {
-            const isStrong = getStoredContrast() === '2';
-            return parsed.isDark
-              ? (isStrong ? DARK_STRONG_COLOR : DARK_DEFAULT_COLOR)
-              : (isStrong ? LIGHT_STRONG_COLOR : LIGHT_DEFAULT_COLOR);
-          }
-          return parsed.hex;
-        }
+      const bodyParsed = rgbToHex(window.getComputedStyle(document.body).backgroundColor);
+      if (bodyParsed) {
+        return mapThemeAndContrastToColor(bodyParsed.isDark, isStrong);
       }
     } catch (_) {}
 
