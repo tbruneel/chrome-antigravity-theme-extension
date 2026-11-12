@@ -3,13 +3,21 @@
 
   const MODE_KEY = 'frameMode';
   const COLOR_KEY = 'frameColor';
-  const LOCAL_CACHE_KEY = '__ag_pwa_frame_color_v10__';
+  const LOCAL_CACHE_KEY = '__ag_pwa_frame_color_v11__';
 
   // Exact Antigravity top header ("Antigravity" title bar) colors for all 4 combinations:
   const LIGHT_DEFAULT_COLOR = '#fafafa'; // rgb(250, 250, 250)
   const LIGHT_STRONG_COLOR  = '#f3f3f3'; // rgb(243, 243, 243)
   const DARK_DEFAULT_COLOR  = '#111114'; // rgb(17, 17, 20)
   const DARK_STRONG_COLOR   = '#121216'; // rgb(18, 18, 22)
+
+  // Exact dimmed header colors when the Settings / Appearance overlay is open (30% black scrim):
+  const OVERLAY_MAP = {
+    [LIGHT_DEFAULT_COLOR]: '#afafaf', // rgb(175, 175, 175)
+    [LIGHT_STRONG_COLOR]:  '#aaaaaa', // rgb(170, 170, 170)
+    [DARK_DEFAULT_COLOR]:  '#0c0c0e', // rgb(12, 12, 14)
+    [DARK_STRONG_COLOR]:   '#0d0d0f'  // rgb(13, 13, 15)
+  };
 
   const VALID_PALETTE = new Set([
     LIGHT_DEFAULT_COLOR,
@@ -32,24 +40,37 @@
     }
   }
 
-  function parseRgba(rgbStr) {
-    if (!rgbStr) return null;
-    const m = rgbStr.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\s*\)/i);
-    if (!m) return null;
-    const a = m[4] !== undefined ? parseFloat(m[4]) : 1;
-    if (a <= 0) return null;
-    const r = Math.min(255, Math.max(0, parseInt(m[1], 10)));
-    const g = Math.min(255, Math.max(0, parseInt(m[2], 10)));
-    const b = Math.min(255, Math.max(0, parseInt(m[3], 10)));
-    const luminance = (0.299 * r) + (0.587 * g) + (0.114 * b);
-    return {
-      r,
-      g,
-      b,
-      a,
-      hex: '#' + [r, g, b].map((x) => x.toString(16).padStart(2, '0')).join(''),
-      isDark: luminance < 128
-    };
+  function parseEffectiveRgba(el) {
+    if (!el || el === document.documentElement) return null;
+    try {
+      const style = window.getComputedStyle(el);
+      const rgbStr = style.backgroundColor;
+      if (!rgbStr) return null;
+      const m = rgbStr.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\s*\)/i);
+      if (!m) return null;
+      const bgAlpha = m[4] !== undefined ? parseFloat(m[4]) : 1;
+      if (bgAlpha <= 0) return null;
+
+      // Also factor in element opacity (e.g., Material .cdk-overlay-backdrop with background:#000 and opacity:0.3)
+      const elOpacity = style.opacity !== undefined && style.opacity !== '' ? parseFloat(style.opacity) : 1;
+      const a = Math.min(1, Math.max(0, bgAlpha * (isNaN(elOpacity) ? 1 : elOpacity)));
+      if (a <= 0) return null;
+
+      const r = Math.min(255, Math.max(0, parseInt(m[1], 10)));
+      const g = Math.min(255, Math.max(0, parseInt(m[2], 10)));
+      const b = Math.min(255, Math.max(0, parseInt(m[3], 10)));
+      const luminance = (0.299 * r) + (0.587 * g) + (0.114 * b);
+      return {
+        r,
+        g,
+        b,
+        a,
+        hex: '#' + [r, g, b].map((x) => x.toString(16).padStart(2, '0')).join(''),
+        isDark: luminance < 128
+      };
+    } catch (_) {
+      return null;
+    }
   }
 
   function rgbObjToHex(r, g, b) {
@@ -102,6 +123,50 @@
     return mapThemeAndContrastToColor(false, isStrong);
   }
 
+  function isSettingsModalOpen() {
+    try {
+      // Check for open dialog / modal / backdrop elements in the DOM
+      const dialogSelectors = [
+        '[role="dialog"]',
+        '[aria-modal="true"]',
+        'dialog[open]',
+        '.cdk-overlay-backdrop-showing',
+        '[data-state="open"]'
+      ];
+      for (const sel of dialogSelectors) {
+        const nodes = document.querySelectorAll(sel);
+        for (const node of nodes) {
+          const rect = node.getBoundingClientRect();
+          if (rect.width > 200 && rect.height > 200) {
+            return true;
+          }
+        }
+      }
+
+      // Also check if any full-viewport fixed/absolute backdrop element is covering the top header bar
+      const topEls = document.elementsFromPoint ? document.elementsFromPoint(200, 12) : [];
+      for (const el of topEls) {
+        if (!el || el === document.body || el === document.documentElement) continue;
+        const parsed = parseEffectiveRgba(el);
+        if (parsed && VALID_PALETTE.has(parsed.hex) && parsed.a >= 0.99) {
+          // Reached the un-covered header bar itself first, so no backdrop is above it
+          break;
+        }
+        const style = window.getComputedStyle(el);
+        if (
+          (style.position === 'fixed' || style.position === 'absolute') &&
+          el.getBoundingClientRect().width >= window.innerWidth * 0.8 &&
+          el.getBoundingClientRect().height >= window.innerHeight * 0.8
+        ) {
+          if ((parsed && parsed.a < 0.99) || (style.backdropFilter && style.backdropFilter !== 'none')) {
+            return true;
+          }
+        }
+      }
+    } catch (_) {}
+    return false;
+  }
+
   function collectLayersAtPoint(x, y) {
     const layers = [];
     const seen = new Set();
@@ -112,7 +177,7 @@
         while (el && el !== document.documentElement) {
           if (!seen.has(el)) {
             seen.add(el);
-            const parsed = parseRgba(window.getComputedStyle(el).backgroundColor);
+            const parsed = parseEffectiveRgba(el);
             if (parsed) {
               layers.push(parsed);
             }
@@ -127,9 +192,9 @@
   function detectThemeColorsFromDom() {
     if (!document.body) return null;
 
+    const modalOpen = isSettingsModalOpen();
+
     // 1. Inspect the layer stack at the top header bar (200, 12) or (16, 12)
-    //    If a translucent modal overlay/scrim (alpha < 0.99) is above one of the 4 base header colors,
-    //    alpha-blend the overlay onto the base header color so the window frame matches the dimmed header in real time!
     const points = [
       [200, 12],
       [16, 12],
@@ -156,7 +221,7 @@
             };
           }
           return {
-            displayColor: baseHex,
+            displayColor: modalOpen ? (OVERLAY_MAP[baseHex] || baseHex) : baseHex,
             baseColor: baseHex
           };
         }
@@ -187,7 +252,7 @@
       baseColor = mapThemeAndContrastToColor(false, isStrong);
     } else {
       try {
-        const bodyParsed = parseRgba(window.getComputedStyle(document.body).backgroundColor);
+        const bodyParsed = parseEffectiveRgba(document.body);
         if (bodyParsed) {
           baseColor = mapThemeAndContrastToColor(bodyParsed.isDark, isStrong);
         }
@@ -196,7 +261,7 @@
 
     if (baseColor) {
       return {
-        displayColor: baseColor,
+        displayColor: modalOpen ? (OVERLAY_MAP[baseColor] || baseColor) : baseColor,
         baseColor: baseColor
       };
     }
@@ -324,7 +389,7 @@
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ['content', 'name', 'media', 'class', 'style', 'data-theme']
+      attributeFilter: ['content', 'name', 'media', 'class', 'style', 'data-theme', 'open', 'aria-hidden', 'data-state']
     });
     refreshColor();
   }
