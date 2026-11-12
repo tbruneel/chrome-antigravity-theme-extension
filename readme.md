@@ -20,6 +20,7 @@ google-chrome-remote-antigravity-extension/
 │   └── rules/
 │       └── rules-git.md            # Git commit identity rules
 ├── src/
+│   ├── background.js               # declarativeNetRequest redirect for /assets/manifest.json
 │   ├── content.js                  # document_start theme-color override & MutationObserver
 │   ├── popup.css                   # Extension popup styles
 │   ├── popup.html                  # Extension popup markup

@@ -1,11 +1,18 @@
 {
   "manifest_version": 3,
   "name": "Google Antigravity Frame Color",
-  "version": "1.0.0",
-  "description": "Sets the window frame (title bar) color for the Google Antigravity Remote Control Chrome Web App.",
+  "version": "1.1.0",
+  "description": "Sets the window frame (title bar) and launch splash color for the Google Antigravity Remote Control Chrome Web App.",
   "permissions": [
-    "storage"
+    "storage",
+    "declarativeNetRequest"
   ],
+  "host_permissions": [
+    "https://antigravity.google.com/*"
+  ],
+  "background": {
+    "service_worker": "src/background.js"
+  },
   "action": {
     "default_title": "Antigravity Frame Color",
     "default_popup": "src/popup.html"
