@@ -21,8 +21,10 @@
   let currentMode = 'auto';
   let manualColor = LIGHT_DEFAULT_COLOR;
   let activeColor = LIGHT_DEFAULT_COLOR;
+  let tornDown = false;
 
   function isContextValid() {
+    if (tornDown) return false;
     try {
       return typeof chrome !== 'undefined' && Boolean(chrome.runtime && chrome.runtime.id);
     } catch (_) {
@@ -207,7 +209,7 @@
   let applying = false;
 
   function applyFrameColor(color) {
-    if (applying || !color) return;
+    if (applying || !color || !isContextValid()) return;
     applying = true;
     try {
       const targetRoot = document.head || document.documentElement;
@@ -241,25 +243,47 @@
   let lastPersistedBaseColor = '';
 
   function persistDetectedColor(color) {
-    if (!color || !VALID_PALETTE.has(color) || color === lastPersistedBaseColor) return;
+    if (!color || !VALID_PALETTE.has(color) || color === lastPersistedBaseColor || !isContextValid()) return;
     lastPersistedBaseColor = color;
     try {
       window.localStorage.setItem(LOCAL_CACHE_KEY, color);
     } catch (_) {}
     try {
       if (isContextValid() && chrome.storage && chrome.storage.sync) {
-        chrome.storage.sync.get({ [COLOR_KEY]: '' }, (items) => {
-          try {
-            if (isContextValid() && items && items[COLOR_KEY] !== color) {
-              chrome.storage.sync.set({ [COLOR_KEY]: color });
-            }
-          } catch (_) {}
-        });
+        chrome.storage.sync.set({ [COLOR_KEY]: color });
       }
     } catch (_) {}
   }
 
+  const observer = new MutationObserver(() => {
+    scheduleRefresh();
+  });
+
+  let heartbeatId = null;
+
+  function teardown() {
+    if (tornDown) return;
+    tornDown = true;
+    try {
+      observer.disconnect();
+    } catch (_) {}
+    if (heartbeatId !== null) {
+      clearInterval(heartbeatId);
+      heartbeatId = null;
+    }
+    window.removeEventListener('storage', refreshColor);
+    window.removeEventListener('pointerdown', onUserInteraction, true);
+    window.removeEventListener('pointerup', onUserInteraction, true);
+    window.removeEventListener('click', onUserInteraction, true);
+    window.removeEventListener('keydown', onUserInteraction, true);
+    window.removeEventListener('keyup', onUserInteraction, true);
+  }
+
   function refreshColor() {
+    if (!isContextValid()) {
+      teardown();
+      return;
+    }
     if (currentMode === 'manual') {
       activeColor = manualColor;
       try {
@@ -286,7 +310,7 @@
 
   let rafPending = false;
   function scheduleRefresh() {
-    if (rafPending) return;
+    if (rafPending || !isContextValid()) return;
     rafPending = true;
     window.requestAnimationFrame(() => {
       rafPending = false;
@@ -294,12 +318,8 @@
     });
   }
 
-  const observer = new MutationObserver(() => {
-    scheduleRefresh();
-  });
-
   function startObserver() {
-    if (!document.documentElement) return;
+    if (!document.documentElement || !isContextValid()) return;
     observer.observe(document.documentElement, {
       childList: true,
       subtree: true,
@@ -325,6 +345,10 @@
 
   // Poll briefly after any pointer/click/key interaction so modal open/close & theme/contrast switches update in real time
   function onUserInteraction() {
+    if (!isContextValid()) {
+      teardown();
+      return;
+    }
     refreshColor();
     setTimeout(refreshColor, 16);
     setTimeout(refreshColor, 50);
@@ -340,10 +364,9 @@
   window.addEventListener('keyup', onUserInteraction, true);
 
   // Lightweight 250ms heartbeat while page is visible to guarantee sync; stops automatically if extension is reloaded
-  const heartbeatId = setInterval(() => {
+  heartbeatId = setInterval(() => {
     if (!isContextValid()) {
-      clearInterval(heartbeatId);
-      observer.disconnect();
+      teardown();
       return;
     }
     if (!document.hidden && currentMode === 'auto') {
@@ -354,7 +377,7 @@
   try {
     if (isContextValid() && chrome.storage && chrome.storage.sync) {
       chrome.storage.sync.get({ [MODE_KEY]: 'auto', [COLOR_KEY]: LIGHT_DEFAULT_COLOR }, (items) => {
-        if (!items) return;
+        if (!isContextValid() || !items) return;
         currentMode = items[MODE_KEY] === 'manual' ? 'manual' : 'auto';
         if (items[COLOR_KEY] && /^#[0-9a-fA-F]{6}$/.test(items[COLOR_KEY])) {
           manualColor = items[COLOR_KEY].toLowerCase();
@@ -363,6 +386,7 @@
       });
 
       chrome.storage.onChanged.addListener((changes, area) => {
+        if (!isContextValid()) return;
         if (area === 'sync') {
           if (changes[MODE_KEY]) {
             currentMode = changes[MODE_KEY].newValue === 'manual' ? 'manual' : 'auto';
