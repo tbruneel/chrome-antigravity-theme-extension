@@ -5,145 +5,28 @@
     return;
   }
 
+  const Shared = globalThis.FrameColorShared;
+  if (!Shared || !Shared.claimRuntimeGuard('__frameColorIframeGuard__')) {
+    return;
+  }
+
+  const HOST_ORIGIN = 'https://antigravity.google.com';
   let tornDown = false;
-
-  function isContextValid() {
-    if (tornDown) return false;
-    try {
-      return typeof chrome !== 'undefined' && Boolean(chrome.runtime && chrome.runtime.id);
-    } catch (_) {
-      return false;
-    }
-  }
-
-  if (isContextValid()) {
-    if (window.__agIframeObserverRuntimeId === chrome.runtime.id) {
-      return;
-    }
-    window.__agIframeObserverRuntimeId = chrome.runtime.id;
-  }
-
-  // Reusable 1x1 offscreen canvas to resolve any CSS Color 4 value (#hex, rgb, oklab, color(srgb ...))
-  let colorCtx = null;
-  function getColorContext() {
-    if (colorCtx) return colorCtx;
-    try {
-      const canvas = document.createElement('canvas');
-      canvas.width = 1;
-      canvas.height = 1;
-      colorCtx = canvas.getContext('2d', { willReadFrequently: true });
-    } catch (_) {
-      colorCtx = null;
-    }
-    return colorCtx;
-  }
-
-  function rgbToHex(r, g, b) {
-    const clamp = (v) => Math.min(255, Math.max(0, Math.round(v)));
-    return '#' + [clamp(r), clamp(g), clamp(b)].map((x) => x.toString(16).padStart(2, '0')).join('');
-  }
-
-  function resolveOpaqueRgb(cssColor) {
-    if (!cssColor) return null;
-    const trimmed = cssColor.trim();
-    if (!trimmed || trimmed === 'transparent' || trimmed === 'rgba(0, 0, 0, 0)' || trimmed.startsWith('var(')) {
-      return null;
-    }
-
-    const hex6 = trimmed.match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
-    if (hex6) {
-      return [parseInt(hex6[1], 16), parseInt(hex6[2], 16), parseInt(hex6[3], 16)];
-    }
-
-    const rgbMatch = trimmed.match(/^rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$/i);
-    if (rgbMatch) {
-      return [parseInt(rgbMatch[1], 10), parseInt(rgbMatch[2], 10), parseInt(rgbMatch[3], 10)];
-    }
-
-    const ctx = getColorContext();
-    if (!ctx) return null;
-    try {
-      ctx.clearRect(0, 0, 1, 1);
-      ctx.fillStyle = 'rgba(0, 0, 0, 0)';
-      ctx.fillStyle = trimmed;
-      ctx.fillRect(0, 0, 1, 1);
-      const data = ctx.getImageData(0, 0, 1, 1).data;
-      if (data[3] === 0) return null;
-      return [data[0], data[1], data[2]];
-    } catch (_) {
-      return null;
-    }
-  }
-
-  function parseCssColorWithAlpha(cssColor) {
-    if (!cssColor) return null;
-    const trimmed = cssColor.trim();
-    if (!trimmed || trimmed === 'transparent' || trimmed === 'rgba(0, 0, 0, 0)') {
-      return null;
-    }
-
-    // 1. Standard rgb() / rgba() (comma or space separated)
-    const rgbaMatch = trimmed.match(
-      /^rgba?\(\s*([\d.]+)\s*[,\s]\s*([\d.]+)\s*[,\s]\s*([\d.]+)(?:\s*[,/]\s*([\d.]+%?))?\s*\)$/i
-    );
-    if (rgbaMatch) {
-      let a = 1;
-      if (rgbaMatch[4] !== undefined) {
-        a = rgbaMatch[4].endsWith('%') ? parseFloat(rgbaMatch[4]) / 100 : parseFloat(rgbaMatch[4]);
-      }
-      if (isNaN(a) || a <= 0) return null;
-      return {
-        r: parseFloat(rgbaMatch[1]),
-        g: parseFloat(rgbaMatch[2]),
-        b: parseFloat(rgbaMatch[3]),
-        a: Math.min(1, Math.max(0, a))
-      };
-    }
-
-    // 2. CSS Color 4 functional syntax with `/ alpha`, e.g. `oklab(0 0 0 / 0.3)` or `color(srgb 0 0 0 / 0.25)`
-    const slashMatch = trimmed.match(/^(.*)\/\s*([\d.]+%?)\s*\)$/);
-    if (slashMatch) {
-      const alphaRaw = slashMatch[2];
-      const a = alphaRaw.endsWith('%') ? parseFloat(alphaRaw) / 100 : parseFloat(alphaRaw);
-      if (isNaN(a) || a <= 0) return null;
-      const opaqueExpr = slashMatch[1].trim() + ')';
-      const rgb = resolveOpaqueRgb(opaqueExpr);
-      if (!rgb) return null;
-      return {
-        r: rgb[0],
-        g: rgb[1],
-        b: rgb[2],
-        a: Math.min(1, Math.max(0, a))
-      };
-    }
-
-    // 3. Opaque CSS color
-    const rgb = resolveOpaqueRgb(trimmed);
-    if (!rgb) return null;
-    return { r: rgb[0], g: rgb[1], b: rgb[2], a: 1 };
-  }
-
-  function blendOverlayOntoBase(baseRgb, overlay) {
-    const a = overlay.a;
-    const r = (overlay.r * a) + (baseRgb[0] * (1 - a));
-    const g = (overlay.g * a) + (baseRgb[1] * (1 - a));
-    const b = (overlay.b * a) + (baseRgb[2] * (1 - a));
-    return rgbToHex(r, g, b);
-  }
+  let lastDisplayColor = '';
+  let lastBaseColor = '';
 
   function resolveBaseShellRgb() {
     try {
       const shellEl = document.querySelector('.agy-shell');
       if (shellEl) {
-        const shellBg = window.getComputedStyle(shellEl).backgroundColor;
-        const rgb = resolveOpaqueRgb(shellBg);
+        const rgb = Shared.resolveOpaqueRgb(window.getComputedStyle(shellEl).backgroundColor);
         if (rgb) return rgb;
       }
 
       if (document.documentElement) {
         const inlineShell = document.documentElement.style.getPropertyValue('--shell');
         if (inlineShell) {
-          const rgb = resolveOpaqueRgb(inlineShell);
+          const rgb = Shared.resolveOpaqueRgb(inlineShell);
           if (rgb) return rgb;
         }
       }
@@ -177,15 +60,14 @@
         if (container) {
           const cRect = container.getBoundingClientRect();
           if (cRect.top <= 1 && cRect.width >= vw - 2 && cRect.height > 100) {
-            const cRgb = resolveOpaqueRgb(window.getComputedStyle(container).backgroundColor);
+            const cRgb = Shared.resolveOpaqueRgb(window.getComputedStyle(container).backgroundColor);
             if (cRgb) {
               return { r: cRgb[0], g: cRgb[1], b: cRgb[2], a: 1 };
             }
           }
         }
 
-        const parsed = parseCssColorWithAlpha(style.backgroundColor);
-        return parsed || { r: 0, g: 0, b: 0, a: 0.3 };
+        return Shared.parseCssColorWithAlpha(style.backgroundColor) || { r: 0, g: 0, b: 0, a: 0.3 };
       }
 
       // 2. Generic Base UI modals, drawers, and full-screen overlays
@@ -210,7 +92,7 @@
         }
         const rect = bd.getBoundingClientRect();
         if (rect.top <= 2 && rect.width >= vw * 0.8 && rect.height >= 40) {
-          const parsed = parseCssColorWithAlpha(style.backgroundColor);
+          const parsed = Shared.parseCssColorWithAlpha(style.backgroundColor);
           if (parsed && parsed.a > 0) {
             return parsed;
           }
@@ -230,7 +112,6 @@
             shellEl.contains(el) &&
             !el.closest('[data-base-ui-portal], [data-overlay-container]')
           ) {
-            // Reached the normal header bar inside `.agy-shell` without hitting an overlay above it
             break;
           }
           if (
@@ -248,7 +129,7 @@
           }
           const rect = el.getBoundingClientRect();
           if (rect.top <= 2 && rect.width >= vw * 0.8 && rect.height >= vh * 0.8) {
-            const parsed = parseCssColorWithAlpha(style.backgroundColor);
+            const parsed = Shared.parseCssColorWithAlpha(style.backgroundColor);
             if (parsed && parsed.a >= 0.05 && parsed.a < 0.99) {
               return parsed;
             }
@@ -259,18 +140,19 @@
     return null;
   }
 
-  let lastDisplayColor = '';
-  let lastBaseColor = '';
-
   function computeAndEmit(force) {
     if (tornDown) return;
+    if (!Shared.isContextValid()) {
+      teardown();
+      return;
+    }
 
     const baseRgb = resolveBaseShellRgb();
     if (!baseRgb) return;
 
-    const baseColor = rgbToHex(baseRgb[0], baseRgb[1], baseRgb[2]);
+    const baseColor = Shared.rgbToHex(baseRgb[0], baseRgb[1], baseRgb[2]);
     const overlay = detectActiveOverlay();
-    const displayColor = overlay ? blendOverlayOntoBase(baseRgb, overlay) : baseColor;
+    const displayColor = overlay ? Shared.blendOverlayOntoBase(baseRgb, overlay) : baseColor;
 
     if (!force && displayColor === lastDisplayColor && baseColor === lastBaseColor) {
       return;
@@ -279,47 +161,20 @@
     lastDisplayColor = displayColor;
     lastBaseColor = baseColor;
 
-    // 1. Direct zero-latency message to the top `antigravity.google.com` frame
     try {
       if (window.top && window.top !== window) {
         window.top.postMessage(
-          {
-            __agFrameExt: true,
-            displayColor,
-            baseColor
-          },
-          'https://antigravity.google.com'
+          { __agFrameExt: true, displayColor, baseColor },
+          HOST_ORIGIN
         );
       }
     } catch (_) {}
-
-    // 2. Relay to background service worker to persist baseColor & update manifest redirect rule
-    if (isContextValid()) {
-      try {
-        chrome.runtime.sendMessage(
-          {
-            type: 'AG_FRAME_COLOR',
-            displayColor,
-            baseColor
-          },
-          () => {
-            try {
-              void chrome.runtime.lastError;
-            } catch (_) {}
-          }
-        );
-      } catch (_) {
-        teardown();
-      }
-    } else {
-      teardown();
-    }
   }
 
   let rafPending = false;
   function scheduleCheck() {
     if (tornDown) return;
-    if (!isContextValid()) {
+    if (!Shared.isContextValid()) {
       teardown();
       return;
     }
@@ -333,16 +188,16 @@
     }
   }
 
-  const observer = new MutationObserver(() => {
-    scheduleCheck();
-  });
-
+  const observer = new MutationObserver(scheduleCheck);
   const mediaQuery = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
 
   function onParentMessage(event) {
     if (tornDown) return;
-    if (event.origin !== 'https://antigravity.google.com') return;
-    if (event.data && event.data.__agFrameExtRequest === true) {
+    if (!Shared.isContextValid()) {
+      teardown();
+      return;
+    }
+    if (event.origin === HOST_ORIGIN && event.data && event.data.__agFrameExtRequest === true) {
       computeAndEmit(true);
     }
   }
@@ -360,8 +215,8 @@
     }
   }
 
-  function start() {
-    if (!document.documentElement || !isContextValid()) return;
+  function startObserver() {
+    if (!document.documentElement || !Shared.isContextValid()) return;
     observer.observe(document.documentElement, {
       childList: true,
       subtree: true,
@@ -380,9 +235,9 @@
   }
 
   if (document.documentElement) {
-    start();
+    startObserver();
   } else {
-    document.addEventListener('DOMContentLoaded', start, { once: true });
+    document.addEventListener('DOMContentLoaded', startObserver, { once: true });
   }
 
   window.addEventListener('load', () => computeAndEmit(true));
@@ -392,18 +247,4 @@
   if (mediaQuery && mediaQuery.addEventListener) {
     mediaQuery.addEventListener('change', scheduleCheck);
   }
-
-  try {
-    if (isContextValid() && chrome.runtime && chrome.runtime.onMessage) {
-      chrome.runtime.onMessage.addListener((msg) => {
-        if (!isContextValid()) {
-          teardown();
-          return;
-        }
-        if (msg && msg.type === 'AG_REQUEST_COLOR') {
-          computeAndEmit(true);
-        }
-      });
-    }
-  } catch (_) {}
 })();

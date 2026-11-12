@@ -1,58 +1,70 @@
 (() => {
   'use strict';
 
-  const MODE_KEY = 'frameMode';
-  const COLOR_KEY = 'frameColor';
-  const DEFAULT_COLOR = '#fafafa';
+  const Shared = globalThis.FrameColorShared;
+  if (!Shared) return;
 
   const autoBtn = document.getElementById('autoBtn');
   const colorPicker = document.getElementById('colorPicker');
   const hexInput = document.getElementById('hexInput');
   const swatches = document.querySelectorAll('.swatch');
 
+  let lastValidColor = Shared.DEFAULT_COLOR;
+
   function updateUi(mode, hex) {
-    const normalized = (hex && /^#[0-9a-fA-F]{6}$/.test(hex)) ? hex.toLowerCase() : DEFAULT_COLOR;
+    const normalized = Shared.normalizeHexColor(hex, Shared.DEFAULT_COLOR);
+    lastValidColor = normalized;
     colorPicker.value = normalized;
     hexInput.value = normalized;
-    if (mode === 'manual') {
-      autoBtn.classList.remove('active');
-    } else {
-      autoBtn.classList.add('active');
-    }
+
+    const isManual = mode === 'manual';
+    autoBtn.classList.toggle('active', !isManual);
+
+    swatches.forEach((btn) => {
+      const swatchColor = (btn.getAttribute('data-color') || '').toLowerCase();
+      btn.classList.toggle('active', isManual && swatchColor === normalized);
+    });
+  }
+
+  function syncFromStorage() {
+    if (!Shared.isContextValid() || !chrome.storage || !chrome.storage.sync) return;
+    chrome.storage.sync.get(
+      { [Shared.MODE_KEY]: 'auto', [Shared.COLOR_KEY]: Shared.DEFAULT_COLOR },
+      (items) => {
+        if (!items) return;
+        updateUi(items[Shared.MODE_KEY], items[Shared.COLOR_KEY]);
+      }
+    );
   }
 
   function setManualColor(hex) {
-    const normalized = hex.toLowerCase();
+    const normalized = Shared.normalizeHexColor(hex, lastValidColor);
     updateUi('manual', normalized);
-    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync) {
-      chrome.storage.sync.set({ [MODE_KEY]: 'manual', [COLOR_KEY]: normalized });
+    if (Shared.isContextValid() && chrome.storage && chrome.storage.sync) {
+      chrome.storage.sync.set({
+        [Shared.MODE_KEY]: 'manual',
+        [Shared.COLOR_KEY]: normalized
+      });
     }
   }
 
   function setAutoMode() {
-    autoBtn.classList.add('active');
-    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync) {
-      chrome.storage.sync.set({ [MODE_KEY]: 'auto' });
+    updateUi('auto', lastValidColor);
+    if (Shared.isContextValid() && chrome.storage && chrome.storage.sync) {
+      chrome.storage.sync.set({ [Shared.MODE_KEY]: 'auto' });
     }
   }
 
-  if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync) {
-    chrome.storage.sync.get({ [MODE_KEY]: 'auto', [COLOR_KEY]: DEFAULT_COLOR }, (items) => {
-      updateUi(items[MODE_KEY], items[COLOR_KEY]);
-    });
-
-    chrome.storage.onChanged.addListener((changes, area) => {
+  if (Shared.isContextValid() && chrome.storage && chrome.storage.sync) {
+    syncFromStorage();
+    chrome.storage.onChanged.addListener((_changes, area) => {
       if (area === 'sync') {
-        chrome.storage.sync.get({ [MODE_KEY]: 'auto', [COLOR_KEY]: DEFAULT_COLOR }, (items) => {
-          updateUi(items[MODE_KEY], items[COLOR_KEY]);
-        });
+        syncFromStorage();
       }
     });
   }
 
-  autoBtn.addEventListener('click', () => {
-    setAutoMode();
-  });
+  autoBtn.addEventListener('click', setAutoMode);
 
   colorPicker.addEventListener('input', () => {
     setManualColor(colorPicker.value);
@@ -63,9 +75,13 @@
     if (!val.startsWith('#')) {
       val = '#' + val;
     }
-    if (/^#[0-9a-fA-F]{6}$/.test(val)) {
+    if (Shared.isValidHexColor(val)) {
       setManualColor(val);
     }
+  });
+
+  hexInput.addEventListener('blur', () => {
+    hexInput.value = lastValidColor;
   });
 
   swatches.forEach((btn) => {

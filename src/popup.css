@@ -93,6 +93,13 @@ body {
   background: #e9eef6;
 }
 
+.swatch.active {
+  border-color: #0b57d0;
+  background: #d3e3fd;
+  color: #0842a0;
+  font-weight: 600;
+}
+
 .dot {
   width: 12px;
   height: 12px;

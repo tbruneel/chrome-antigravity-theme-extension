@@ -8,16 +8,16 @@ A lightweight Manifest V3 Chrome extension whose sole purpose is to synchronize 
 
 By default, `https://antigravity.google.com/` serves `<meta name="theme-color" content="#1f1f1f">` in its outer HTML `<head>` and `"theme_color": "#1f1f1f"` in `/assets/manifest.json`, while rendering the actual Antigravity UI inside a full-screen cross-origin child `<iframe>` (`https://antigravity.static.usercontent.goog/*`). As a result, Chrome renders the standalone PWA window with a static `#1f1f1f` title bar regardless of your selected theme, contrast mode, or active modal overlays.
 
-In **Auto (Match App Theme)** mode (enabled by default), `src/iframe-observer.js` observes `.agy-shell` (`--shell`) and active modal backdrops (`.settings-modal-backdrop`, `[data-testid="modal-backdrop"]`, `.aux-drawer-backdrop`) directly inside the UI iframe in real time, and relays the exact resolved color to `src/content.js` and `src/background.js`:
+In **Auto (Match App Theme)** mode (enabled by default), `src/iframe-observer.js` observes `.agy-shell` (`--shell`) and active modal backdrops (`.settings-modal-backdrop`, `[data-testid="modal-backdrop"]`, `.aux-drawer-backdrop`) directly inside the UI iframe in real time, and relays the resolved colors to `src/content.js` and `src/background.js`:
 
-| Theme | Contrast | Base Header Color | Settings / Overlay Open (`30%` Scrim) |
+| Theme | Contrast | Base Header Color | Settings / Modal Open (`30%` Scrim) |
 | :--- | :--- | :--- | :--- |
 | **Light** | Default Contrast | `#fafafa` (`rgb(250, 250, 250)`) | `#afafaf` (`rgb(175, 175, 175)`) |
 | **Light** | Strong Contrast | `#f3f3f3` (`rgb(243, 243, 243)`) | `#aaaaaa` (`rgb(170, 170, 170)`) |
 | **Dark** | Default Contrast | `#111114` (`rgb(17, 17, 20)`) | `#0c0c0e` (`rgb(12, 12, 14)`) |
 | **Dark** | Strong Contrast | `#121216` (`rgb(18, 18, 22)`) | `#0d0d0f` (`rgb(13, 13, 15)`) |
 
-Custom theme presets and custom background colors in **Settings → Appearance** are also resolved automatically from `--shell` and alpha-blended in real time whenever a modal overlay opens or closes. You can also switch to manual mode at any time via the extension popup to pick a custom hex color or select one of the 4 preset swatches.
+Custom theme presets and custom background colors in **Settings → Appearance** are also resolved automatically from `--shell` and alpha-blended in real time whenever a modal overlay opens or closes. You can switch to manual mode at any time via the extension popup to pick a custom hex color or select one of the 4 preset swatches.
 
 ---
 
@@ -29,12 +29,13 @@ google-chrome-remote-antigravity-extension/
 │   └── rules/
 │       └── rules-git.md            # Git commit identity rules
 ├── src/
-│   ├── background.js               # Manifest redirect rule & cross-frame color persistence
-│   ├── content.js                  # Top-frame <meta name="theme-color"> lock & zero-flash cache
+│   ├── background.js               # Manifest redirect rule & live tab re-injection on reload
+│   ├── content.js                  # Top-frame <meta name="theme-color"> lock & storage sync
 │   ├── iframe-observer.js          # Real-time --shell & Settings/modal overlay observer in UI iframe
 │   ├── popup.css                   # Extension popup styles
 │   ├── popup.html                  # Extension popup markup
-│   └── popup.js                    # Auto mode toggle, color picker, hex input & preset swatches
+│   ├── popup.js                    # Auto mode toggle, color picker, hex input & preset swatches
+│   └── shared.js                   # Shared constants, hex validation, color blending & DOM helpers
 ├── manifest.json                   # Chrome Extension Manifest V3
 ├── readme.md                       # Documentation (Markdown source)
 └── readme.md.html                  # Documentation (Standalone HTML)

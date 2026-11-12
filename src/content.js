@@ -1,11 +1,14 @@
 (() => {
   'use strict';
 
-  const MODE_KEY = 'frameMode';
-  const COLOR_KEY = 'frameColor';
-  const LOCAL_CACHE_KEY = '__ag_pwa_frame_color_v12__';
-  const LEGACY_CACHE_KEY = '__ag_pwa_frame_color_v11__';
-  const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+  const Shared = globalThis.FrameColorShared;
+  if (!Shared || !Shared.claimRuntimeGuard('__frameColorContentGuard__')) {
+    return;
+  }
+
+  const LOCAL_CACHE_KEY = '__ag_frame_color_cache__';
+  const LEGACY_CACHE_KEYS = ['__ag_pwa_frame_color_v12__', '__ag_pwa_frame_color_v11__'];
+  const IFRAME_ORIGIN = 'https://antigravity.static.usercontent.goog';
 
   // Exact Antigravity top header ("Antigravity" title bar) colors for the 4 standard presets:
   const LIGHT_DEFAULT_COLOR = '#fafafa'; // rgb(250, 250, 250)
@@ -14,29 +17,41 @@
   const DARK_STRONG_COLOR   = '#121216'; // rgb(18, 18, 22)
 
   let tornDown = false;
-
-  function isContextValid() {
-    if (tornDown) return false;
-    try {
-      return typeof chrome !== 'undefined' && Boolean(chrome.runtime && chrome.runtime.id);
-    } catch (_) {
-      return false;
-    }
-  }
-
-  if (isContextValid()) {
-    if (window.__agTopContentRuntimeId === chrome.runtime.id) {
-      return;
-    }
-    window.__agTopContentRuntimeId = chrome.runtime.id;
-  }
-
+  let storageReady = false;
   let currentMode = 'auto';
-  let manualColor = LIGHT_DEFAULT_COLOR;
-  let activeColor = LIGHT_DEFAULT_COLOR;
+  let manualColor = Shared.DEFAULT_COLOR;
+  let activeColor = Shared.DEFAULT_COLOR;
+  let lastSyncedStorageColor = '';
+
   let hasIframeReport = false;
   let lastIframeDisplayColor = '';
   let lastIframeBaseColor = '';
+
+  function readCachedColor() {
+    try {
+      const direct = window.localStorage.getItem(LOCAL_CACHE_KEY);
+      if (Shared.isValidHexColor(direct)) {
+        return direct.toLowerCase();
+      }
+      for (const legacyKey of LEGACY_CACHE_KEYS) {
+        const legacy = window.localStorage.getItem(legacyKey);
+        if (Shared.isValidHexColor(legacy)) {
+          const normalized = legacy.toLowerCase();
+          window.localStorage.setItem(LOCAL_CACHE_KEY, normalized);
+          window.localStorage.removeItem(legacyKey);
+          return normalized;
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  function writeCachedColor(color) {
+    if (!Shared.isValidHexColor(color)) return;
+    try {
+      window.localStorage.setItem(LOCAL_CACHE_KEY, color.toLowerCase());
+    } catch (_) {}
+  }
 
   function isStrongContrastFromStorage() {
     try {
@@ -58,17 +73,10 @@
   }
 
   function detectFallbackHostColor() {
-    // 1. Prefer cached exact baseColor from the live UI iframe (supports all 4 presets + custom themes)
-    try {
-      const cached = window.localStorage.getItem(LOCAL_CACHE_KEY) || window.localStorage.getItem(LEGACY_CACHE_KEY);
-      if (cached && HEX_COLOR_RE.test(cached)) {
-        return cached.toLowerCase();
-      }
-    } catch (_) {}
+    const cached = readCachedColor();
+    if (cached) return cached;
 
     const isStrong = isStrongContrastFromStorage();
-
-    // 2. First-run fallback before the iframe has reported once
     if (document.body && (document.body.classList.contains('dark-theme') || document.body.classList.contains('dark'))) {
       return mapThemeAndContrastToColor(true, isStrong);
     }
@@ -82,70 +90,31 @@
     return mapThemeAndContrastToColor(false, isStrong);
   }
 
-  activeColor = detectFallbackHostColor();
+  function syncBaseColorToStorage(baseColor) {
+    if (!Shared.isValidHexColor(baseColor)) return;
+    const normalized = baseColor.toLowerCase();
+    writeCachedColor(normalized);
 
-  let applying = false;
-
-  function applyFrameColor(color) {
-    if (applying || !color || !isContextValid()) return;
-    applying = true;
-    try {
-      const targetRoot = document.head || document.documentElement;
-      if (!targetRoot) return;
-
-      const metas = document.querySelectorAll('meta[name="theme-color"]');
-      if (metas.length === 0) {
-        const meta = document.createElement('meta');
-        meta.setAttribute('name', 'theme-color');
-        meta.setAttribute('content', color);
-        targetRoot.appendChild(meta);
-      } else {
-        metas.forEach((meta, index) => {
-          if (index === 0) {
-            if (meta.getAttribute('content') !== color) {
-              meta.setAttribute('content', color);
-            }
-            if (meta.hasAttribute('media')) {
-              meta.removeAttribute('media');
-            }
-          } else {
-            meta.remove();
-          }
-        });
-      }
-    } finally {
-      applying = false;
+    if (!storageReady || currentMode !== 'auto' || normalized === lastSyncedStorageColor) {
+      return;
     }
-  }
+    if (!Shared.isContextValid() || !chrome.storage || !chrome.storage.sync) {
+      return;
+    }
 
-  function cacheBaseColorLocally(color) {
-    if (!color || !HEX_COLOR_RE.test(color)) return;
+    lastSyncedStorageColor = normalized;
     try {
-      window.localStorage.setItem(LOCAL_CACHE_KEY, color.toLowerCase());
+      chrome.storage.sync.get({ [Shared.COLOR_KEY]: '' }, (items) => {
+        if (!Shared.isContextValid() || !items) return;
+        if (items[Shared.COLOR_KEY] !== normalized) {
+          chrome.storage.sync.set({ [Shared.COLOR_KEY]: normalized });
+        }
+      });
     } catch (_) {}
   }
 
-  function handleLiveIframeColors(displayColor, baseColor) {
-    if (!isContextValid()) {
-      teardown();
-      return;
-    }
-    if (!displayColor || !HEX_COLOR_RE.test(displayColor)) return;
-    if (!baseColor || !HEX_COLOR_RE.test(baseColor)) return;
-
-    hasIframeReport = true;
-    lastIframeDisplayColor = displayColor.toLowerCase();
-    lastIframeBaseColor = baseColor.toLowerCase();
-    cacheBaseColorLocally(lastIframeBaseColor);
-
-    if (currentMode === 'auto') {
-      activeColor = lastIframeDisplayColor;
-      applyFrameColor(activeColor);
-    }
-  }
-
   function requestIframeColors() {
-    if (!isContextValid()) return;
+    if (!Shared.isContextValid()) return;
     try {
       const iframes = document.querySelectorAll('iframe');
       for (const frame of iframes) {
@@ -157,49 +126,58 @@
   }
 
   function refreshColor() {
-    if (!isContextValid()) {
+    if (!Shared.isContextValid()) {
       teardown();
       return;
     }
 
     if (currentMode === 'manual') {
       activeColor = manualColor;
-      cacheBaseColorLocally(activeColor);
-      applyFrameColor(activeColor);
+      writeCachedColor(activeColor);
+      Shared.applyThemeColorMeta(activeColor);
       return;
     }
 
-    // If the child UI iframe was unmounted (e.g. navigated back to instance picker), clear live iframe lock
+    // Clear live iframe lock if the child UI iframe was unmounted (e.g. navigated back to picker)
     if (hasIframeReport && document.body && !document.querySelector('iframe')) {
       hasIframeReport = false;
     }
 
-    if (hasIframeReport && lastIframeDisplayColor) {
+    if (hasIframeReport && lastIframeDisplayColor && lastIframeBaseColor) {
       activeColor = lastIframeDisplayColor;
+      syncBaseColorToStorage(lastIframeBaseColor);
     } else {
       activeColor = detectFallbackHostColor();
     }
 
-    applyFrameColor(activeColor);
+    Shared.applyThemeColorMeta(activeColor);
   }
 
   // Apply startup color immediately at document_start to prevent any title bar flash
-  applyFrameColor(activeColor);
+  activeColor = detectFallbackHostColor();
+  Shared.applyThemeColorMeta(activeColor);
 
   const observer = new MutationObserver(() => {
-    if (!isContextValid()) {
-      teardown();
-      return;
-    }
     refreshColor();
   });
 
   function onWindowMessage(event) {
     if (tornDown) return;
-    if (event.origin !== 'https://antigravity.static.usercontent.goog') return;
+    if (!Shared.isContextValid()) {
+      teardown();
+      return;
+    }
+    if (event.origin !== IFRAME_ORIGIN) return;
     if (event.data && event.data.__agFrameExt === true) {
       event.stopImmediatePropagation();
-      handleLiveIframeColors(event.data.displayColor, event.data.baseColor);
+      const { displayColor, baseColor } = event.data;
+      if (!Shared.isValidHexColor(displayColor) || !Shared.isValidHexColor(baseColor)) {
+        return;
+      }
+      hasIframeReport = true;
+      lastIframeDisplayColor = displayColor.toLowerCase();
+      lastIframeBaseColor = baseColor.toLowerCase();
+      refreshColor();
     }
   }
 
@@ -217,7 +195,7 @@
   window.addEventListener('storage', refreshColor);
 
   function startObserver() {
-    if (!document.documentElement || !isContextValid()) return;
+    if (!document.documentElement || !Shared.isContextValid()) return;
     observer.observe(document.documentElement, {
       childList: true,
       subtree: true,
@@ -240,42 +218,36 @@
   });
 
   try {
-    if (isContextValid() && chrome.runtime && chrome.runtime.onMessage) {
-      chrome.runtime.onMessage.addListener((msg) => {
-        if (!isContextValid()) {
-          teardown();
-          return;
+    if (Shared.isContextValid() && chrome.storage && chrome.storage.sync) {
+      chrome.storage.sync.get(
+        { [Shared.MODE_KEY]: 'auto', [Shared.COLOR_KEY]: Shared.DEFAULT_COLOR },
+        (items) => {
+          if (!Shared.isContextValid() || !items) return;
+          storageReady = true;
+          currentMode = items[Shared.MODE_KEY] === 'manual' ? 'manual' : 'auto';
+          manualColor = Shared.normalizeHexColor(items[Shared.COLOR_KEY], Shared.DEFAULT_COLOR);
+          refreshColor();
+          if (currentMode === 'auto') {
+            requestIframeColors();
+          }
         }
-        if (msg && msg.type === 'AG_APPLY_FRAME_COLOR') {
-          handleLiveIframeColors(msg.displayColor, msg.baseColor);
-        }
-      });
-    }
-
-    if (isContextValid() && chrome.storage && chrome.storage.sync) {
-      chrome.storage.sync.get({ [MODE_KEY]: 'auto', [COLOR_KEY]: LIGHT_DEFAULT_COLOR }, (items) => {
-        if (!isContextValid() || !items) return;
-        currentMode = items[MODE_KEY] === 'manual' ? 'manual' : 'auto';
-        if (items[COLOR_KEY] && HEX_COLOR_RE.test(items[COLOR_KEY])) {
-          manualColor = items[COLOR_KEY].toLowerCase();
-        }
-        refreshColor();
-        if (currentMode === 'auto') {
-          requestIframeColors();
-        }
-      });
+      );
 
       chrome.storage.onChanged.addListener((changes, area) => {
-        if (!isContextValid()) {
+        if (!Shared.isContextValid()) {
           teardown();
           return;
         }
         if (area === 'sync') {
-          if (changes[MODE_KEY]) {
-            currentMode = changes[MODE_KEY].newValue === 'manual' ? 'manual' : 'auto';
+          if (changes[Shared.MODE_KEY]) {
+            const nextMode = changes[Shared.MODE_KEY].newValue === 'manual' ? 'manual' : 'auto';
+            if (nextMode === 'auto' && currentMode !== 'auto') {
+              lastSyncedStorageColor = '';
+            }
+            currentMode = nextMode;
           }
-          if (changes[COLOR_KEY] && changes[COLOR_KEY].newValue && HEX_COLOR_RE.test(changes[COLOR_KEY].newValue)) {
-            manualColor = changes[COLOR_KEY].newValue.toLowerCase();
+          if (changes[Shared.COLOR_KEY] && Shared.isValidHexColor(changes[Shared.COLOR_KEY].newValue)) {
+            manualColor = changes[Shared.COLOR_KEY].newValue.toLowerCase();
           }
           refreshColor();
           if (currentMode === 'auto') {

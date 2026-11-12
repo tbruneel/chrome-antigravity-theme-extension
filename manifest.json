@@ -25,6 +25,7 @@
         "https://antigravity.google.com/*"
       ],
       "js": [
+        "src/shared.js",
         "src/content.js"
       ],
       "run_at": "document_start"
@@ -34,6 +35,7 @@
         "https://antigravity.static.usercontent.goog/*"
       ],
       "js": [
+        "src/shared.js",
         "src/iframe-observer.js"
       ],
       "all_frames": true,
