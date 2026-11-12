@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Frame Color</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="header">Frame Color</div>
+  <div class="picker-row">
+    <input type="color" id="colorPicker" value="#ffffff" aria-label="Color Picker">
+    <input type="text" id="hexInput" value="#ffffff" maxlength="7" spellcheck="false" aria-label="Hex Color">
+  </div>
+  <div class="swatches">
+    <button type="button" class="swatch" data-color="#ffffff" title="White (#ffffff)">
+      <span class="dot" style="background:#ffffff"></span>White
+    </button>
+    <button type="button" class="swatch" data-color="#f0f4f9" title="Surface Light (#f0f4f9)">
+      <span class="dot" style="background:#f0f4f9"></span>Light Gray
+    </button>
+    <button type="button" class="swatch" data-color="#1f1f1f" title="Default Dark (#1f1f1f)">
+      <span class="dot" style="background:#1f1f1f"></span>Dark
+    </button>
+    <button type="button" class="swatch" data-color="#131314" title="Deep Dark (#131314)">
+      <span class="dot" style="background:#131314"></span>Deep Dark
+    </button>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
