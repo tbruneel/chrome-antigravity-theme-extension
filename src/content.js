@@ -3,7 +3,7 @@
 
   const MODE_KEY = 'frameMode';
   const COLOR_KEY = 'frameColor';
-  const LOCAL_CACHE_KEY = '__ag_pwa_frame_color_v8__';
+  const LOCAL_CACHE_KEY = '__ag_pwa_frame_color_v9__';
 
   // Exact Antigravity top header ("Antigravity" title bar) colors for all 4 combinations:
   const LIGHT_DEFAULT_COLOR = '#fafafa'; // rgb(250, 250, 250)
@@ -22,19 +22,29 @@
   let manualColor = LIGHT_DEFAULT_COLOR;
   let activeColor = LIGHT_DEFAULT_COLOR;
 
-  function rgbToHex(rgbStr) {
+  function parseRgba(rgbStr) {
     if (!rgbStr) return null;
     const m = rgbStr.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\s*\)/i);
     if (!m) return null;
-    if (m[4] !== undefined && parseFloat(m[4]) < 0.95) return null; // Ignore translucent modal backdrops
+    const a = m[4] !== undefined ? parseFloat(m[4]) : 1;
+    if (a <= 0) return null;
     const r = Math.min(255, Math.max(0, parseInt(m[1], 10)));
     const g = Math.min(255, Math.max(0, parseInt(m[2], 10)));
     const b = Math.min(255, Math.max(0, parseInt(m[3], 10)));
     const luminance = (0.299 * r) + (0.587 * g) + (0.114 * b);
     return {
+      r,
+      g,
+      b,
+      a,
       hex: '#' + [r, g, b].map((x) => x.toString(16).padStart(2, '0')).join(''),
       isDark: luminance < 128
     };
+  }
+
+  function rgbObjToHex(r, g, b) {
+    const clamp = (v) => Math.min(255, Math.max(0, Math.round(v)));
+    return '#' + [clamp(r), clamp(g), clamp(b)].map((x) => x.toString(16).padStart(2, '0')).join('');
   }
 
   function isStrongContrastFromStorage() {
@@ -82,39 +92,70 @@
     return mapThemeAndContrastToColor(false, isStrong);
   }
 
-  function sampleExactPaletteAtPoint(x, y) {
+  function collectLayersAtPoint(x, y) {
+    const layers = [];
+    const seen = new Set();
     try {
       const elements = document.elementsFromPoint ? document.elementsFromPoint(x, y) : [document.elementFromPoint(x, y)];
       for (const startEl of elements) {
         let el = startEl;
         while (el && el !== document.documentElement) {
-          const parsed = rgbToHex(window.getComputedStyle(el).backgroundColor);
-          if (parsed && VALID_PALETTE.has(parsed.hex)) {
-            return parsed.hex;
+          if (!seen.has(el)) {
+            seen.add(el);
+            const parsed = parseRgba(window.getComputedStyle(el).backgroundColor);
+            if (parsed) {
+              layers.push(parsed);
+            }
           }
           el = el.parentElement;
         }
       }
     } catch (_) {}
-    return null;
+    return layers;
   }
 
-  function detectThemeColorFromDom() {
+  function detectThemeColorsFromDom() {
     if (!document.body) return null;
 
-    // 1. Sample the live DOM header/sidebar directly (piercing through any open modal backdrop)
-    // to find which of the 4 exact surface colors (#fafafa, #f3f3f3, #111114, #121216) is rendered:
-    const exactMatch =
-      sampleExactPaletteAtPoint(200, 12) ||
-      sampleExactPaletteAtPoint(16, 12) ||
-      sampleExactPaletteAtPoint(16, 200);
-    if (exactMatch) {
-      return exactMatch;
+    // 1. Inspect the layer stack at the top header bar (200, 12) or (16, 12)
+    //    If a translucent modal overlay/scrim (alpha < 0.99) is above one of the 4 base header colors,
+    //    alpha-blend the overlay onto the base header color so the window frame matches the dimmed header in real time!
+    const points = [
+      [200, 12],
+      [16, 12],
+      [16, 200]
+    ];
+
+    for (const [x, y] of points) {
+      const layers = collectLayersAtPoint(x, y);
+      let overlay = null;
+      for (const layer of layers) {
+        if (layer.a < 0.99 && !overlay) {
+          overlay = layer;
+          continue;
+        }
+        if (layer.a >= 0.99 && VALID_PALETTE.has(layer.hex)) {
+          const baseHex = layer.hex;
+          if (overlay) {
+            const r = (overlay.r * overlay.a) + (layer.r * (1 - overlay.a));
+            const g = (overlay.g * overlay.a) + (layer.g * (1 - overlay.a));
+            const b = (overlay.b * overlay.a) + (layer.b * (1 - overlay.a));
+            return {
+              displayColor: rgbObjToHex(r, g, b),
+              baseColor: baseHex
+            };
+          }
+          return {
+            displayColor: baseHex,
+            baseColor: baseHex
+          };
+        }
+      }
     }
 
     // 2. Fallback during early page load before the header/sidebar mounts:
-    // Inspect inner chat canvas at (600, 200) or body classes/styles, combined with stored contrast ('2' = Strong).
     const isStrong = isStrongContrastFromStorage();
+    let baseColor = null;
 
     if (
       document.body.classList.contains('dark-theme') ||
@@ -124,10 +165,8 @@
       document.documentElement.getAttribute('data-theme') === 'dark' ||
       document.body.getAttribute('data-theme') === 'dark'
     ) {
-      return mapThemeAndContrastToColor(true, isStrong);
-    }
-
-    if (
+      baseColor = mapThemeAndContrastToColor(true, isStrong);
+    } else if (
       document.body.classList.contains('light-theme') ||
       document.body.classList.contains('light') ||
       document.documentElement.classList.contains('light-theme') ||
@@ -135,15 +174,22 @@
       document.documentElement.getAttribute('data-theme') === 'light' ||
       document.body.getAttribute('data-theme') === 'light'
     ) {
-      return mapThemeAndContrastToColor(false, isStrong);
+      baseColor = mapThemeAndContrastToColor(false, isStrong);
+    } else {
+      try {
+        const bodyParsed = parseRgba(window.getComputedStyle(document.body).backgroundColor);
+        if (bodyParsed) {
+          baseColor = mapThemeAndContrastToColor(bodyParsed.isDark, isStrong);
+        }
+      } catch (_) {}
     }
 
-    try {
-      const bodyParsed = rgbToHex(window.getComputedStyle(document.body).backgroundColor);
-      if (bodyParsed) {
-        return mapThemeAndContrastToColor(bodyParsed.isDark, isStrong);
-      }
-    } catch (_) {}
+    if (baseColor) {
+      return {
+        displayColor: baseColor,
+        baseColor: baseColor
+      };
+    }
 
     return null;
   }
@@ -185,6 +231,7 @@
   }
 
   function persistDetectedColor(color) {
+    if (!color || !VALID_PALETTE.has(color)) return;
     try {
       window.localStorage.setItem(LOCAL_CACHE_KEY, color);
     } catch (_) {}
@@ -207,11 +254,15 @@
       return;
     }
 
-    const domColor = detectThemeColorFromDom();
-    const nextColor = domColor || detectThemeColorFromStorage();
-    if (nextColor !== activeColor) {
-      activeColor = nextColor;
-      persistDetectedColor(activeColor);
+    const domResult = detectThemeColorsFromDom();
+    const nextDisplayColor = domResult ? domResult.displayColor : detectThemeColorFromStorage();
+    const nextBaseColor = domResult ? domResult.baseColor : nextDisplayColor;
+
+    if (nextBaseColor) {
+      persistDetectedColor(nextBaseColor);
+    }
+    if (nextDisplayColor !== activeColor) {
+      activeColor = nextDisplayColor;
     }
     applyFrameColor(activeColor);
   }
@@ -257,25 +308,28 @@
 
   window.addEventListener('storage', refreshColor);
 
-  // Poll briefly after any pointer/click interaction so React state/CSS variable updates are caught immediately
+  // Poll briefly after any pointer/click/key interaction so modal open/close & theme/contrast switches update in real time
   function onUserInteraction() {
     refreshColor();
-    setTimeout(refreshColor, 30);
-    setTimeout(refreshColor, 100);
+    setTimeout(refreshColor, 16);
+    setTimeout(refreshColor, 50);
+    setTimeout(refreshColor, 120);
     setTimeout(refreshColor, 250);
     setTimeout(refreshColor, 500);
   }
 
+  window.addEventListener('pointerdown', onUserInteraction, true);
   window.addEventListener('pointerup', onUserInteraction, true);
   window.addEventListener('click', onUserInteraction, true);
+  window.addEventListener('keydown', onUserInteraction, true);
   window.addEventListener('keyup', onUserInteraction, true);
 
-  // Lightweight 500ms heartbeat while page is visible to guarantee sync even if CSS variables change without DOM attribute mutations
+  // Lightweight 250ms heartbeat while page is visible to guarantee sync
   setInterval(() => {
     if (!document.hidden && currentMode === 'auto') {
       refreshColor();
     }
-  }, 500);
+  }, 250);
 
   if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync) {
     chrome.storage.sync.get({ [MODE_KEY]: 'auto', [COLOR_KEY]: LIGHT_DEFAULT_COLOR }, (items) => {
