@@ -3,7 +3,7 @@
 
   const MODE_KEY = 'frameMode';
   const COLOR_KEY = 'frameColor';
-  const LOCAL_CACHE_KEY = '__ag_pwa_frame_color_v7__';
+  const LOCAL_CACHE_KEY = '__ag_pwa_frame_color_v8__';
 
   // Exact Antigravity top header ("Antigravity" title bar) colors for all 4 combinations:
   const LIGHT_DEFAULT_COLOR = '#fafafa'; // rgb(250, 250, 250)
@@ -61,7 +61,9 @@
     try {
       const cached = window.localStorage.getItem(LOCAL_CACHE_KEY);
       if (cached && VALID_PALETTE.has(cached.toLowerCase())) {
-        return cached.toLowerCase();
+        const lower = cached.toLowerCase();
+        const isCachedDark = (lower === DARK_DEFAULT_COLOR || lower === DARK_STRONG_COLOR);
+        return mapThemeAndContrastToColor(isCachedDark, isStrong);
       }
 
       const bcsp = window.localStorage.getItem('bcsp');
@@ -111,6 +113,7 @@
     }
 
     // 2. Fallback during early page load before the header/sidebar mounts:
+    // Inspect inner chat canvas at (600, 200) or body classes/styles, combined with stored contrast ('2' = Strong).
     const isStrong = isStrongContrastFromStorage();
 
     if (
