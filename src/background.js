@@ -1,7 +1,7 @@
 'use strict';
 
 const STORAGE_KEY = 'frameColor';
-const DEFAULT_COLOR = '#ffffff';
+const DEFAULT_COLOR = '#fafafa';
 const RULE_ID = 1;
 
 function buildManifestDataUrl(color) {

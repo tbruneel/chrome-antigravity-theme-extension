@@ -2,8 +2,8 @@
   'use strict';
 
   const STORAGE_KEY = 'frameColor';
-  const LOCAL_CACHE_KEY = '__ag_pwa_frame_color__';
-  const DEFAULT_COLOR = '#ffffff';
+  const LOCAL_CACHE_KEY = '__ag_pwa_frame_color_v2__';
+  const DEFAULT_COLOR = '#fafafa';
 
   let currentColor = DEFAULT_COLOR;
   try {

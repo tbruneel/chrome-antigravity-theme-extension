@@ -2,7 +2,7 @@
   'use strict';
 
   const STORAGE_KEY = 'frameColor';
-  const DEFAULT_COLOR = '#ffffff';
+  const DEFAULT_COLOR = '#fafafa';
 
   const colorPicker = document.getElementById('colorPicker');
   const hexInput = document.getElementById('hexInput');

@@ -477,7 +477,7 @@ pre:hover > .code-block-copy-button,
 <hr>
 <h2 id="background">Background</h2>
 <p>By default, <code>https://antigravity.google.com/</code> serves <code>&lt;meta name=&quot;theme-color&quot; content=&quot;#1f1f1f&quot;&gt;</code> in its HTML <code>&lt;head&gt;</code> and <code>&quot;theme_color&quot;: &quot;#1f1f1f&quot;</code> in <code>/assets/manifest.json</code>, causing Chrome to render the standalone PWA window with a dark (<code>#1f1f1f</code>) title bar even when the web interface is in light mode.</p>
-<p>Because Chromium gives the live DOM's <code>&lt;meta name=&quot;theme-color&quot;&gt;</code> priority over the web app manifest's <code>theme_color</code>, this extension runs at <code>document_start</code> to override <code>&lt;meta name=&quot;theme-color&quot;&gt;</code> to <code>#ffffff</code> (white) by default—or any custom hex color selected in the extension popup—and locks it via a <code>MutationObserver</code>.</p>
+<p>Because Chromium gives the live DOM's <code>&lt;meta name=&quot;theme-color&quot;&gt;</code> priority over the web app manifest's <code>theme_color</code>, this extension runs at <code>document_start</code> to override <code>&lt;meta name=&quot;theme-color&quot;&gt;</code> to <code>#fafafa</code> (<code>rgb(250, 250, 250)</code>) by default—or any custom hex color selected in the extension popup—and locks it via a <code>MutationObserver</code>.</p>
 <hr>
 <h2 id="repository-structure">Repository Structure</h2>
 <pre class="hljs"><code class="language-text"><div>google-chrome-remote-antigravity-extension/
@@ -500,7 +500,7 @@ pre:hover > .code-block-copy-button,
 <li>Open <code>chrome://extensions/</code> in Google Chrome.</li>
 <li>Enable <strong>Developer mode</strong> (top-right toggle).</li>
 <li>Click <strong>Load unpacked</strong> and select <code>D:\Development\google-chrome-remote-antigravity-extension</code>.</li>
-<li>Open the <strong>Google Antigravity</strong> web app (<code>https://antigravity.google.com/</code>) — the window frame defaults to <code>#ffffff</code> (white) and can be customized at any time via the extension icon in the title bar.</li>
+<li>Open the <strong>Google Antigravity</strong> web app (<code>https://antigravity.google.com/</code>) — the window frame defaults to <code>#fafafa</code> (<code>rgb(250, 250, 250)</code>) and can be customized at any time via the extension icon in the title bar.</li>
 </ol>
 
 <script>
