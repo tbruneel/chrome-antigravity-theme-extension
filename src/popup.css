@@ -14,7 +14,32 @@ body {
 
 .header {
   font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.auto-btn {
+  width: 100%;
+  padding: 7px 10px;
   margin-bottom: 10px;
+  border: 1px solid #dadce0;
+  border-radius: 6px;
+  background: #f8fafd;
+  font-size: 12px;
+  font-weight: 500;
+  color: #1f1f1f;
+  cursor: pointer;
+  text-align: center;
+}
+
+.auto-btn:hover {
+  background: #e9eef6;
+}
+
+.auto-btn.active {
+  border-color: #0b57d0;
+  background: #d3e3fd;
+  color: #0842a0;
+  font-weight: 600;
 }
 
 .picker-row {
