@@ -3,7 +3,7 @@
 
   const MODE_KEY = 'frameMode';
   const COLOR_KEY = 'frameColor';
-  const LOCAL_CACHE_KEY = '__ag_pwa_frame_color_v5__';
+  const LOCAL_CACHE_KEY = '__ag_pwa_frame_color_v6__';
 
   // Exact Antigravity top header ("Antigravity" title bar) colors for all 4 combinations:
   const LIGHT_DEFAULT_COLOR = '#fafafa'; // rgb(250, 250, 250)
@@ -19,7 +19,7 @@
     if (!rgbStr) return null;
     const m = rgbStr.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\s*\)/i);
     if (!m) return null;
-    if (m[4] !== undefined && parseFloat(m[4]) === 0) return null;
+    if (m[4] !== undefined && parseFloat(m[4]) < 0.95) return null; // Ignore translucent modal backdrops/scrims
     const r = Math.min(255, Math.max(0, parseInt(m[1], 10)));
     const g = Math.min(255, Math.max(0, parseInt(m[2], 10)));
     const b = Math.min(255, Math.max(0, parseInt(m[3], 10)));
@@ -35,7 +35,7 @@
       for (let i = 0; i < window.localStorage.length; i++) {
         const k = window.localStorage.key(i);
         if (k && k.endsWith('.jetski.contrast')) {
-          return window.localStorage.getItem(k) === '2';
+          return window.localStorage.getItem(k) === '1';
         }
       }
     } catch (_) {}
@@ -75,15 +75,25 @@
     return mapThemeAndContrastToColor(false, isStrong);
   }
 
-  function sampleColorAtPoint(x, y) {
+  function sampleExactPaletteAtPoint(x, y) {
     try {
-      let el = document.elementFromPoint(x, y);
-      while (el && el !== document.documentElement) {
-        const parsed = rgbToHex(window.getComputedStyle(el).backgroundColor);
-        if (parsed) {
-          return parsed;
+      const elements = document.elementsFromPoint ? document.elementsFromPoint(x, y) : [document.elementFromPoint(x, y)];
+      for (const startEl of elements) {
+        let el = startEl;
+        while (el && el !== document.documentElement) {
+          const parsed = rgbToHex(window.getComputedStyle(el).backgroundColor);
+          if (
+            parsed && (
+              parsed.hex === LIGHT_DEFAULT_COLOR ||
+              parsed.hex === LIGHT_STRONG_COLOR ||
+              parsed.hex === DARK_DEFAULT_COLOR ||
+              parsed.hex === DARK_STRONG_COLOR
+            )
+          ) {
+            return parsed.hex;
+          }
+          el = el.parentElement;
         }
-        el = el.parentElement;
       }
     } catch (_) {}
     return null;
@@ -92,25 +102,20 @@
   function detectThemeColorFromDom() {
     if (!document.body) return null;
 
-    const isStrong = isStrongContrastFromStorage();
-
-    // 1. Sample the top "Antigravity" header bar directly (x=200, y=12)
-    // If it matches one of the 4 exact header colors, return it immediately.
-    const topSample = sampleColorAtPoint(200, 12) || sampleColorAtPoint(16, 12);
-    if (topSample) {
-      if (
-        topSample.hex === LIGHT_DEFAULT_COLOR ||
-        topSample.hex === LIGHT_STRONG_COLOR ||
-        topSample.hex === DARK_DEFAULT_COLOR ||
-        topSample.hex === DARK_STRONG_COLOR
-      ) {
-        return topSample.hex;
-      }
+    // 1. Walk all elements under the top header bar (piercing through any open modal backdrop/scrim)
+    // to find the exact rendered header surface color (#fafafa, #f3f3f3, #111114, or #121216)
+    const exactMatch =
+      sampleExactPaletteAtPoint(200, 12) ||
+      sampleExactPaletteAtPoint(16, 12) ||
+      sampleExactPaletteAtPoint(16, 200);
+    if (exactMatch) {
+      return exactMatch;
     }
 
-    // 2. Determine whether the active theme is Dark or Light, and combine with contrast (Default vs Strong)
-    // to always produce the exact top-header color (#fafafa, #f3f3f3, #111114, or #121216),
-    // never body's --mat-sys-surface (#131314 / #ffffff).
+    // 2. Fallback: determine Light vs Dark from DOM classes/attributes or inner canvas color,
+    // and combine with stored contrast (1 = Strong, 2 = Default).
+    const isStrong = isStrongContrastFromStorage();
+
     if (
       document.body.classList.contains('dark-theme') ||
       document.body.classList.contains('dark') ||
@@ -131,10 +136,6 @@
       document.body.getAttribute('data-theme') === 'light'
     ) {
       return mapThemeAndContrastToColor(false, isStrong);
-    }
-
-    if (topSample) {
-      return mapThemeAndContrastToColor(topSample.isDark, isStrong);
     }
 
     try {
@@ -256,8 +257,9 @@
 
   window.addEventListener('storage', refreshColor);
   window.addEventListener('click', () => {
-    setTimeout(refreshColor, 50);
-    setTimeout(refreshColor, 250);
+    setTimeout(refreshColor, 20);
+    setTimeout(refreshColor, 100);
+    setTimeout(refreshColor, 300);
   }, true);
 
   if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync) {
