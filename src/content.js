@@ -17,9 +17,6 @@
   const DARK_STRONG_COLOR   = '#121216'; // rgb(18, 18, 22)
 
   let tornDown = false;
-  let storageReady = false;
-  let currentMode = 'auto';
-  let manualColor = Shared.DEFAULT_COLOR;
   let activeColor = Shared.DEFAULT_COLOR;
   let lastSyncedStorageColor = '';
 
@@ -44,13 +41,6 @@
       }
     } catch (_) {}
     return null;
-  }
-
-  function writeCachedColor(color) {
-    if (!Shared.isValidHexColor(color)) return;
-    try {
-      window.localStorage.setItem(LOCAL_CACHE_KEY, color.toLowerCase());
-    } catch (_) {}
   }
 
   function isStrongContrastFromStorage() {
@@ -93,9 +83,12 @@
   function syncBaseColorToStorage(baseColor) {
     if (!Shared.isValidHexColor(baseColor)) return;
     const normalized = baseColor.toLowerCase();
-    writeCachedColor(normalized);
 
-    if (!storageReady || currentMode !== 'auto' || normalized === lastSyncedStorageColor) {
+    try {
+      window.localStorage.setItem(LOCAL_CACHE_KEY, normalized);
+    } catch (_) {}
+
+    if (normalized === lastSyncedStorageColor) {
       return;
     }
     if (!Shared.isContextValid() || !chrome.storage || !chrome.storage.sync) {
@@ -131,13 +124,6 @@
       return;
     }
 
-    if (currentMode === 'manual') {
-      activeColor = manualColor;
-      writeCachedColor(activeColor);
-      Shared.applyThemeColorMeta(activeColor);
-      return;
-    }
-
     // Clear live iframe lock if the child UI iframe was unmounted (e.g. navigated back to picker)
     if (hasIframeReport && document.body && !document.querySelector('iframe')) {
       hasIframeReport = false;
@@ -157,9 +143,7 @@
   activeColor = detectFallbackHostColor();
   Shared.applyThemeColorMeta(activeColor);
 
-  const observer = new MutationObserver(() => {
-    refreshColor();
-  });
+  const observer = new MutationObserver(refreshColor);
 
   function onWindowMessage(event) {
     if (tornDown) return;
@@ -216,45 +200,4 @@
     refreshColor();
     requestIframeColors();
   });
-
-  try {
-    if (Shared.isContextValid() && chrome.storage && chrome.storage.sync) {
-      chrome.storage.sync.get(
-        { [Shared.MODE_KEY]: 'auto', [Shared.COLOR_KEY]: Shared.DEFAULT_COLOR },
-        (items) => {
-          if (!Shared.isContextValid() || !items) return;
-          storageReady = true;
-          currentMode = items[Shared.MODE_KEY] === 'manual' ? 'manual' : 'auto';
-          manualColor = Shared.normalizeHexColor(items[Shared.COLOR_KEY], Shared.DEFAULT_COLOR);
-          refreshColor();
-          if (currentMode === 'auto') {
-            requestIframeColors();
-          }
-        }
-      );
-
-      chrome.storage.onChanged.addListener((changes, area) => {
-        if (!Shared.isContextValid()) {
-          teardown();
-          return;
-        }
-        if (area === 'sync') {
-          if (changes[Shared.MODE_KEY]) {
-            const nextMode = changes[Shared.MODE_KEY].newValue === 'manual' ? 'manual' : 'auto';
-            if (nextMode === 'auto' && currentMode !== 'auto') {
-              lastSyncedStorageColor = '';
-            }
-            currentMode = nextMode;
-          }
-          if (changes[Shared.COLOR_KEY] && Shared.isValidHexColor(changes[Shared.COLOR_KEY].newValue)) {
-            manualColor = changes[Shared.COLOR_KEY].newValue.toLowerCase();
-          }
-          refreshColor();
-          if (currentMode === 'auto') {
-            requestIframeColors();
-          }
-        }
-      });
-    }
-  } catch (_) {}
 })();

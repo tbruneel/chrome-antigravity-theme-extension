@@ -5,7 +5,6 @@
     return;
   }
 
-  const MODE_KEY = 'frameMode';
   const COLOR_KEY = 'frameColor';
   const DEFAULT_COLOR = '#fafafa';
   const RULE_ID = 1;
@@ -180,7 +179,6 @@
   }
 
   globalThis.FrameColorShared = Object.freeze({
-    MODE_KEY,
     COLOR_KEY,
     DEFAULT_COLOR,
     RULE_ID,

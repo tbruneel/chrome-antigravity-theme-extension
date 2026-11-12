@@ -1,6 +1,6 @@
 # Google Chrome Remote Antigravity Extension (`google-chrome-remote-antigravity-extension`)
 
-A lightweight Manifest V3 Chrome extension whose sole purpose is to synchronize and lock the window frame (title bar) color of the **Google Antigravity Remote Control** Chrome Web App (`https://antigravity.google.com/`).
+A zero-configuration Manifest V3 Chrome extension that automatically synchronizes the window frame (title bar) and launch splash color of the **Google Antigravity Remote Control** Chrome Web App (`https://antigravity.google.com/`).
 
 ---
 
@@ -8,7 +8,7 @@ A lightweight Manifest V3 Chrome extension whose sole purpose is to synchronize 
 
 By default, `https://antigravity.google.com/` serves `<meta name="theme-color" content="#1f1f1f">` in its outer HTML `<head>` and `"theme_color": "#1f1f1f"` in `/assets/manifest.json`, while rendering the actual Antigravity UI inside a full-screen cross-origin child `<iframe>` (`https://antigravity.static.usercontent.goog/*`). As a result, Chrome renders the standalone PWA window with a static `#1f1f1f` title bar regardless of your selected theme, contrast mode, or active modal overlays.
 
-In **Auto (Match App Theme)** mode (enabled by default), `src/iframe-observer.js` observes `.agy-shell` (`--shell`) and active modal backdrops (`.settings-modal-backdrop`, `[data-testid="modal-backdrop"]`, `.aux-drawer-backdrop`) directly inside the UI iframe in real time, and relays the resolved colors to `src/content.js` and `src/background.js`:
+This extension observes `.agy-shell` (`--shell`) and active modal backdrops (`.settings-modal-backdrop`, `[data-testid="modal-backdrop"]`, `.aux-drawer-backdrop`) directly inside the UI iframe in real time, and automatically updates `<meta name="theme-color">` and the manifest `theme_color` / `background_color`:
 
 | Theme | Contrast | Base Header Color | Settings / Modal Open (`30%` Scrim) |
 | :--- | :--- | :--- | :--- |
@@ -17,7 +17,7 @@ In **Auto (Match App Theme)** mode (enabled by default), `src/iframe-observer.js
 | **Dark** | Default Contrast | `#111114` (`rgb(17, 17, 20)`) | `#0c0c0e` (`rgb(12, 12, 14)`) |
 | **Dark** | Strong Contrast | `#121216` (`rgb(18, 18, 22)`) | `#0d0d0f` (`rgb(13, 13, 15)`) |
 
-Custom theme presets and custom background colors in **Settings → Appearance** are also resolved automatically from `--shell` and alpha-blended in real time whenever a modal overlay opens or closes. You can switch to manual mode at any time via the extension popup to pick a custom hex color or select one of the 4 preset swatches.
+Custom theme presets and custom background colors configured in **Settings → Appearance** are also resolved automatically from `--shell` and alpha-blended in real time whenever a modal overlay opens or closes.
 
 ---
 
@@ -32,9 +32,6 @@ google-chrome-remote-antigravity-extension/
 │   ├── background.js               # Manifest redirect rule & live tab re-injection on reload
 │   ├── content.js                  # Top-frame <meta name="theme-color"> lock & storage sync
 │   ├── iframe-observer.js          # Real-time --shell & Settings/modal overlay observer in UI iframe
-│   ├── popup.css                   # Extension popup styles
-│   ├── popup.html                  # Extension popup markup
-│   ├── popup.js                    # Auto mode toggle, color picker, hex input & preset swatches
 │   └── shared.js                   # Shared constants, hex validation, color blending & DOM helpers
 ├── manifest.json                   # Chrome Extension Manifest V3
 ├── readme.md                       # Documentation (Markdown source)
@@ -48,4 +45,4 @@ google-chrome-remote-antigravity-extension/
 1. Open `chrome://extensions/` in Google Chrome.
 2. Enable **Developer mode** (top-right toggle).
 3. Click **Load unpacked** and select `D:\Development\google-chrome-remote-antigravity-extension` (or click **Reload (`↻`)** if already loaded).
-4. Open the **Google Antigravity** web app (`https://antigravity.google.com/`) — the window frame automatically matches your active Light/Dark + Default/Strong contrast theme (`#fafafa`, `#f3f3f3`, `#111114`, or `#121216`) and dims seamlessly when **Settings** is opened, or can be overridden via the extension icon in the title bar.
+4. Open the **Google Antigravity** web app (`https://antigravity.google.com/`) — the window frame automatically matches your active theme, contrast level, and modal overlays in real time.

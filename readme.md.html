@@ -473,11 +473,11 @@ pre:hover > .code-block-copy-button,
 </head>
 <body>
 <h1 id="google-chrome-remote-antigravity-extension-google-chrome-remote-antigravity-extension">Google Chrome Remote Antigravity Extension (<code>google-chrome-remote-antigravity-extension</code>)</h1>
-<p>A lightweight Manifest V3 Chrome extension whose sole purpose is to synchronize and lock the window frame (title bar) color of the <strong>Google Antigravity Remote Control</strong> Chrome Web App (<code>https://antigravity.google.com/</code>).</p>
+<p>A zero-configuration Manifest V3 Chrome extension that automatically synchronizes the window frame (title bar) and launch splash color of the <strong>Google Antigravity Remote Control</strong> Chrome Web App (<code>https://antigravity.google.com/</code>).</p>
 <hr>
 <h2 id="background">Background</h2>
 <p>By default, <code>https://antigravity.google.com/</code> serves <code>&lt;meta name=&quot;theme-color&quot; content=&quot;#1f1f1f&quot;&gt;</code> in its outer HTML <code>&lt;head&gt;</code> and <code>&quot;theme_color&quot;: &quot;#1f1f1f&quot;</code> in <code>/assets/manifest.json</code>, while rendering the actual Antigravity UI inside a full-screen cross-origin child <code>&lt;iframe&gt;</code> (<code>https://antigravity.static.usercontent.goog/*</code>). As a result, Chrome renders the standalone PWA window with a static <code>#1f1f1f</code> title bar regardless of your selected theme, contrast mode, or active modal overlays.</p>
-<p>In <strong>Auto (Match App Theme)</strong> mode (enabled by default), <code>src/iframe-observer.js</code> observes <code>.agy-shell</code> (<code>--shell</code>) and active modal backdrops (<code>.settings-modal-backdrop</code>, <code>[data-testid=&quot;modal-backdrop&quot;]</code>, <code>.aux-drawer-backdrop</code>) directly inside the UI iframe in real time, and relays the resolved colors to <code>src/content.js</code> and <code>src/background.js</code>:</p>
+<p>This extension observes <code>.agy-shell</code> (<code>--shell</code>) and active modal backdrops (<code>.settings-modal-backdrop</code>, <code>[data-testid=&quot;modal-backdrop&quot;]</code>, <code>.aux-drawer-backdrop</code>) directly inside the UI iframe in real time, and automatically updates <code>&lt;meta name=&quot;theme-color&quot;&gt;</code> and the manifest <code>theme_color</code> / <code>background_color</code>:</p>
 <table>
 <thead>
 <tr>
@@ -514,7 +514,7 @@ pre:hover > .code-block-copy-button,
 </tr>
 </tbody>
 </table>
-<p>Custom theme presets and custom background colors in <strong>Settings → Appearance</strong> are also resolved automatically from <code>--shell</code> and alpha-blended in real time whenever a modal overlay opens or closes. You can switch to manual mode at any time via the extension popup to pick a custom hex color or select one of the 4 preset swatches.</p>
+<p>Custom theme presets and custom background colors configured in <strong>Settings → Appearance</strong> are also resolved automatically from <code>--shell</code> and alpha-blended in real time whenever a modal overlay opens or closes.</p>
 <hr>
 <h2 id="repository-structure">Repository Structure</h2>
 <pre class="hljs"><code class="language-text"><div>google-chrome-remote-antigravity-extension/
@@ -525,9 +525,6 @@ pre:hover > .code-block-copy-button,
 │   ├── background.js               # Manifest redirect rule &amp; live tab re-injection on reload
 │   ├── content.js                  # Top-frame &lt;meta name=&quot;theme-color&quot;&gt; lock &amp; storage sync
 │   ├── iframe-observer.js          # Real-time --shell &amp; Settings/modal overlay observer in UI iframe
-│   ├── popup.css                   # Extension popup styles
-│   ├── popup.html                  # Extension popup markup
-│   ├── popup.js                    # Auto mode toggle, color picker, hex input &amp; preset swatches
 │   └── shared.js                   # Shared constants, hex validation, color blending &amp; DOM helpers
 ├── manifest.json                   # Chrome Extension Manifest V3
 ├── readme.md                       # Documentation (Markdown source)
@@ -539,7 +536,7 @@ pre:hover > .code-block-copy-button,
 <li>Open <code>chrome://extensions/</code> in Google Chrome.</li>
 <li>Enable <strong>Developer mode</strong> (top-right toggle).</li>
 <li>Click <strong>Load unpacked</strong> and select <code>D:\Development\google-chrome-remote-antigravity-extension</code> (or click <strong>Reload (<code>↻</code>)</strong> if already loaded).</li>
-<li>Open the <strong>Google Antigravity</strong> web app (<code>https://antigravity.google.com/</code>) — the window frame automatically matches your active Light/Dark + Default/Strong contrast theme (<code>#fafafa</code>, <code>#f3f3f3</code>, <code>#111114</code>, or <code>#121216</code>) and dims seamlessly when <strong>Settings</strong> is opened, or can be overridden via the extension icon in the title bar.</li>
+<li>Open the <strong>Google Antigravity</strong> web app (<code>https://antigravity.google.com/</code>) — the window frame automatically matches your active theme, contrast level, and modal overlays in real time.</li>
 </ol>
 
 <script>
