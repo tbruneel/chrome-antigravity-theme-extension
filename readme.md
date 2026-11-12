@@ -1,4 +1,4 @@
-# Google Chrome Remote Antigravity Extension (`google-chrome-remote-antigravity-extension`)
+# Google Antigravity Theme Extension (`chrome-antigravity-theme-extension`)
 
 A zero-configuration Manifest V3 Chrome extension that automatically synchronizes the window frame (title bar) and launch splash color of the **Google Antigravity Remote Control** Chrome Web App (`https://antigravity.google.com/`).
 
@@ -24,7 +24,7 @@ Custom theme presets and custom background colors configured in **Settings → A
 ## Repository Structure
 
 ```text
-google-chrome-remote-antigravity-extension/
+chrome-antigravity-theme-extension/
 ├── .agents/
 │   └── rules/
 │       └── rules-git.md            # Git commit identity rules
@@ -44,5 +44,5 @@ google-chrome-remote-antigravity-extension/
 
 1. Open `chrome://extensions/` in Google Chrome.
 2. Enable **Developer mode** (top-right toggle).
-3. Click **Load unpacked** and select `D:\Development\google-chrome-remote-antigravity-extension` (or click **Reload (`↻`)** if already loaded).
+3. Click **Load unpacked** and select `D:\Development\chrome-antigravity-theme-extension` (or click **Reload (`↻`)** if already loaded).
 4. Open the **Google Antigravity** web app (`https://antigravity.google.com/`) — the window frame automatically matches your active theme, contrast level, and modal overlays in real time.
