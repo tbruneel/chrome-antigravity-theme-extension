@@ -3,7 +3,7 @@
 
   const MODE_KEY = 'frameMode';
   const COLOR_KEY = 'frameColor';
-  const LOCAL_CACHE_KEY = '__ag_pwa_frame_color_v9__';
+  const LOCAL_CACHE_KEY = '__ag_pwa_frame_color_v10__';
 
   // Exact Antigravity top header ("Antigravity" title bar) colors for all 4 combinations:
   const LIGHT_DEFAULT_COLOR = '#fafafa'; // rgb(250, 250, 250)
@@ -21,6 +21,14 @@
   let currentMode = 'auto';
   let manualColor = LIGHT_DEFAULT_COLOR;
   let activeColor = LIGHT_DEFAULT_COLOR;
+
+  function isContextValid() {
+    try {
+      return typeof chrome !== 'undefined' && Boolean(chrome.runtime && chrome.runtime.id);
+    } catch (_) {
+      return false;
+    }
+  }
 
   function parseRgba(rgbStr) {
     if (!rgbStr) return null;
@@ -230,18 +238,25 @@
     }
   }
 
+  let lastPersistedBaseColor = '';
+
   function persistDetectedColor(color) {
-    if (!color || !VALID_PALETTE.has(color)) return;
+    if (!color || !VALID_PALETTE.has(color) || color === lastPersistedBaseColor) return;
+    lastPersistedBaseColor = color;
     try {
       window.localStorage.setItem(LOCAL_CACHE_KEY, color);
     } catch (_) {}
-    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync) {
-      chrome.storage.sync.get({ [COLOR_KEY]: '' }, (items) => {
-        if (items[COLOR_KEY] !== color) {
-          chrome.storage.sync.set({ [COLOR_KEY]: color });
-        }
-      });
-    }
+    try {
+      if (isContextValid() && chrome.storage && chrome.storage.sync) {
+        chrome.storage.sync.get({ [COLOR_KEY]: '' }, (items) => {
+          try {
+            if (isContextValid() && items && items[COLOR_KEY] !== color) {
+              chrome.storage.sync.set({ [COLOR_KEY]: color });
+            }
+          } catch (_) {}
+        });
+      }
+    } catch (_) {}
   }
 
   function refreshColor() {
@@ -324,32 +339,40 @@
   window.addEventListener('keydown', onUserInteraction, true);
   window.addEventListener('keyup', onUserInteraction, true);
 
-  // Lightweight 250ms heartbeat while page is visible to guarantee sync
-  setInterval(() => {
+  // Lightweight 250ms heartbeat while page is visible to guarantee sync; stops automatically if extension is reloaded
+  const heartbeatId = setInterval(() => {
+    if (!isContextValid()) {
+      clearInterval(heartbeatId);
+      observer.disconnect();
+      return;
+    }
     if (!document.hidden && currentMode === 'auto') {
       refreshColor();
     }
   }, 250);
 
-  if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync) {
-    chrome.storage.sync.get({ [MODE_KEY]: 'auto', [COLOR_KEY]: LIGHT_DEFAULT_COLOR }, (items) => {
-      currentMode = items[MODE_KEY] === 'manual' ? 'manual' : 'auto';
-      if (items[COLOR_KEY] && /^#[0-9a-fA-F]{6}$/.test(items[COLOR_KEY])) {
-        manualColor = items[COLOR_KEY].toLowerCase();
-      }
-      refreshColor();
-    });
-
-    chrome.storage.onChanged.addListener((changes, area) => {
-      if (area === 'sync') {
-        if (changes[MODE_KEY]) {
-          currentMode = changes[MODE_KEY].newValue === 'manual' ? 'manual' : 'auto';
-        }
-        if (changes[COLOR_KEY] && changes[COLOR_KEY].newValue && /^#[0-9a-fA-F]{6}$/.test(changes[COLOR_KEY].newValue)) {
-          manualColor = changes[COLOR_KEY].newValue.toLowerCase();
+  try {
+    if (isContextValid() && chrome.storage && chrome.storage.sync) {
+      chrome.storage.sync.get({ [MODE_KEY]: 'auto', [COLOR_KEY]: LIGHT_DEFAULT_COLOR }, (items) => {
+        if (!items) return;
+        currentMode = items[MODE_KEY] === 'manual' ? 'manual' : 'auto';
+        if (items[COLOR_KEY] && /^#[0-9a-fA-F]{6}$/.test(items[COLOR_KEY])) {
+          manualColor = items[COLOR_KEY].toLowerCase();
         }
         refreshColor();
-      }
-    });
-  }
+      });
+
+      chrome.storage.onChanged.addListener((changes, area) => {
+        if (area === 'sync') {
+          if (changes[MODE_KEY]) {
+            currentMode = changes[MODE_KEY].newValue === 'manual' ? 'manual' : 'auto';
+          }
+          if (changes[COLOR_KEY] && changes[COLOR_KEY].newValue && /^#[0-9a-fA-F]{6}$/.test(changes[COLOR_KEY].newValue)) {
+            manualColor = changes[COLOR_KEY].newValue.toLowerCase();
+          }
+          refreshColor();
+        }
+      });
+    }
+  } catch (_) {}
 })();
