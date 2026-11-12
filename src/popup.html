@@ -7,7 +7,7 @@
 </head>
 <body>
   <div class="header">Frame Color</div>
-  <button type="button" id="autoBtn" class="auto-btn active" title="Automatically detect the app's Light/Dark theme">
+  <button type="button" id="autoBtn" class="auto-btn active" title="Automatically detect the app's Light/Dark and Default/Strong contrast theme">
     Auto (Match App Theme)
   </button>
   <div class="picker-row">
@@ -15,17 +15,17 @@
     <input type="text" id="hexInput" value="#fafafa" maxlength="7" spellcheck="false" aria-label="Hex Color">
   </div>
   <div class="swatches">
-    <button type="button" class="swatch" data-color="#fafafa" title="Default Light (250, 250, 250 / #fafafa)">
-      <span class="dot" style="background:#fafafa"></span>Default
+    <button type="button" class="swatch" data-color="#fafafa" title="Light — Default Contrast (250, 250, 250 / #fafafa)">
+      <span class="dot" style="background:#fafafa"></span>Light
     </button>
-    <button type="button" class="swatch" data-color="#ffffff" title="Pure White (#ffffff)">
-      <span class="dot" style="background:#ffffff"></span>White
+    <button type="button" class="swatch" data-color="#f3f3f3" title="Light — Strong Contrast (243, 243, 243 / #f3f3f3)">
+      <span class="dot" style="background:#f3f3f3"></span>Light HC
     </button>
-    <button type="button" class="swatch" data-color="#1f1f1f" title="Default Dark (#1f1f1f)">
-      <span class="dot" style="background:#1f1f1f"></span>Dark
+    <button type="button" class="swatch" data-color="#111114" title="Dark — Default Contrast (17, 17, 20 / #111114)">
+      <span class="dot" style="background:#111114"></span>Dark
     </button>
-    <button type="button" class="swatch" data-color="#131314" title="Deep Dark (#131314)">
-      <span class="dot" style="background:#131314"></span>Deep Dark
+    <button type="button" class="swatch" data-color="#121216" title="Dark — Strong Contrast (18, 18, 22 / #121216)">
+      <span class="dot" style="background:#121216"></span>Dark HC
     </button>
   </div>
   <script src="popup.js"></script>
