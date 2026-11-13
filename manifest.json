@@ -1,8 +1,13 @@
 {
   "manifest_version": 3,
-  "name": "Google Antigravity Frame Color",
-  "version": "1.3.0",
+  "name": "Title Bar Theme for Google Antigravity",
+  "version": "1.3.1",
   "description": "Automatically synchronizes the window frame (title bar) and launch splash color with the Google Antigravity Remote Control Web App.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
   "permissions": [
     "storage",
     "declarativeNetRequest",
